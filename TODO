@@ -1,0 +1,47 @@
+- Remove "catch-all" (_) pattern matches that simply create an error, where the
+  function is indeed total. Thereto, operators should be an ADT instead of
+  strings!!!
+  This way, if I add constructors to the datatypes in the future the compiler
+  will emit a warning/error if certain functions that ought to be total are not.
+- Implement suggestions
+
+        
+How to improve the code?
+========================
+
+- Should this be put on hackage?
+- Is there a reason in favor of Parsec3 instead of 2?
+- Make languages instances of Foldable for e.g. easier renaming of vars?
+- When renaming, improve sharing?
+  http://blog.ezyang.com/2011/06/a-pattern-for-increasing-sharing/
+- Think about type class to get and change var names?
+- What advanced type features / language extensions / libraries could improve the code?
+  Mainly remove code duplication by using abstractions?
+
+- http://sigusr2.net/2011/Apr/18/parser-combinators-made-simple.html
+- http://book.realworldhaskell.org/read/using-parsec.html
+- http://bloggingmath.wordpress.com/2010/01/20/writing-a-compiler-in-haskell-compiler-series-part-i/
+- http://hackage.haskell.org/cgi-bin/hackage-scripts/package/language-python
+- http://hackage.haskell.org/packages/archive/pkg-list.html#cat:language
+- http://www.cs.uu.nl/wiki/UHC/WebHome
+
+
+What's next?
+============
+
+- reduce tests size
+    - either delete or add everywhere type Assertion
+    - reuse strict tests for extended versions
+    - reuse extended arithmetic tests that do not use loop constructs
+    - reuse/create transformation tests from xE to yE that do not use looping
+      constructs (should become the same)
+    - reduce transformation to strict tests for goto and while to only specific
+      things if it has been possible to factor out common strict transform. code
+- Function definition for extended with "lexical" scope + nested functions
+    - look at the parsec examples to get some ideas but basically just a constructor Func FIdent Stat
+    - rather macros than real functions that are like nested programs
+      where parameters are x1,... and output is x0
+    - spricht etwas gegen verschachtelte funktionsdefinitionen? -> no
+    - need not only keep vars as state but also function definitions
+      and function definitions can be arbitrarily nested so keep tree of
+      function definitions

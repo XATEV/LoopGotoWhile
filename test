@@ -1,0 +1,312 @@
+x2 := 5;
+x2 := x2 + 1;
+LOOP x2 DO 
+  x0 := x0 + 1
+END // -> 6
+
+//---------------------------------------------------
+// t(0) = 0, t(1) = 1, t(2) = 0, t(3) = 0, t(4) = 1, t(10) = 1, t(4) = 20,
+LOOP x1 DO
+  x5 := x5 + 1;
+  x6 := 0; x4 := 0;
+  LOOP x5 DO
+    x4 := x4 + 1;
+    x3 := 0; x2 := 0;
+    LOOP x4 DO
+      x2 := x2 + 1;
+      x3 := x3 + x2
+    END; // x3 = d(x4 )
+    x6 := x6 + x3
+  END; // x6 = t(x5 )
+  IF x6 = x1 THEN x0 := 1 END
+END
+
+-----------------------------------------------------
+WHILE a o b DO
+  P
+END
+
+=>
+
+IF a o b THEN
+  c := 1
+ELSE
+  c := 0
+END;
+WHILE c != 0 DO
+  P;
+  IF a o b THEN
+    c := 1
+  ELSE
+    c := 0
+  END
+END
+
+Where c is a previously unused variable that represents a "boolean value".
+
+
+-------------------
+Function definition
+-------------------
+
+Does anything speak against nested function definitions? -> No, but outer 
+function is not inside the scope of the inner function. Thus, one cannot really
+implement recursive functions. However, what I call n-recursive functions is
+possible :):
+
+    FUN fac DO
+      FUN fac DO
+        FUN fac DO
+          x0 := x1;
+        END;
+        x0 := x1 * fac(x-1)
+      END;
+      x0 := x1 * fac(x-1)
+    END
+
+Sensible output is only defined for the parameter 3.
+
+
+    FUN sqrt DO
+      LOOP x1 DO
+        c := c + 1;
+        t := c * c;
+        IF t = x1 THEN x0 := c END
+      END
+    END
+
+All the variables in a function definition are local. No way to access global.
+So the x1 in sqrt is another x1 than the one outside. Function definition is
+a statement so can come anywhere where a statement can come in the code.
+function definitions are saved in a separate environment. If two functions with
+the same name are declared, the latter overwrites the definition of the former
+for the following code. This way I can include and implicit prelude but the
+user can overwrite e.g. sqrt with his own definition if he wants to.
+
+Actually, functions are rather macros than "real functions".
+
+The following is an example useage
+
+    x2 := sqrt(4) + 1
+
+becomes (after "macro-expansion") -->
+
+    x5 := 4;
+    LOOP x5 DO
+      c := c + 1;
+      t := c * c;
+      IF t = x5 THEN x2 := c END
+    END;
+    x2 := x2 + 1
+
+where x5, c and t are unused variables.
+
+
+----------------------------------------------------
+How to reuse code / data types? (Open data types?)
+--------------------------------------------------
+
+- Show languages and show how they are to be interpreted and transformed into Haskell structures.
+- Explain that the code examples are rather pseudocode where a lot of definitions are omitted to only show the core idea / problem
+
+### Solution 1
+
+Make a big language that incorporates handling of LOOPs, WHILEs etc. and
+for each particular language only parse the allowed constructs. E.g.
+
+    data BigStat
+        = Assign VarIdent AExp
+        | If BExp BigStat
+        | IfElse BExp BigStat BigStat
+        | Loop VarIdent BigStat
+        | While BExp BigStat
+        | Seq [BigStat]
+
+Loop does not parse WHILEs:
+
+    import BigLanguage (parseIfElseStat, parseIfStat, parseLoopStat, parseAssignStat)
+
+    type LoopStat = BigStat
+
+    parseStat :: Parser LoopStat
+    parseStat = choice 
+              [ try parseIfElseStat
+              , parseIfStat
+              , parseLoopStat
+              , try parseAssignStat
+              ]
+
+While does not parse LOOPs:
+
+    import BigLanguage (parseIfElseStat, parseIfStat, parseWhileStat, parseAssignStat)
+
+    type WhileStat = BigStat
+
+    parseStat :: Parser WhileStat
+    parseStat = choice 
+              [ try parseIfElseStat
+              , parseIfStat
+              , parseWhileStat
+              , try parseAssignStat
+              ]
+
+While this approach works I don't like it conceptually. A big monolithic
+language is created and then reduced to fit the respective sublanguages whereas
+I'd like to create a small core of shared language constructs and extend them
+to fit the suplanguage. I find the latter approach more natural, more flexible
+and conceptually more beautiful.
+
+However, I don't see an easy solution in Haskell mostly since data types are
+closed as opposed to e.g. classes in OO languages. If I used an OO language
+I would have an idea how to design the code the second way simply because
+I could extend the definitions of the core language. So here comes a failed
+approach in Haskell:
+
+
+### Failution 2
+
+"Core" data type and constructors. These language constructs are shared by
+the particular languages (not every data definition is shown).
+
+    data Stat
+        = Assign VarIdent AExp
+        | If BExp Stat
+        | IfElse BExp Stat Stat
+        | Seq [Stat]
+
+    parseIfStat :: Parser Stat
+    parseIfStat = do 
+        reserved "IF"
+        cond <- parseRelExp
+        reserved "THEN"
+        thenpart <- parseStat
+        reserved "END"
+        return $ If cond thenpart
+
+
+Now, Loop and While data types are (ill-)defined like this:
+
+    data LoopStat
+        = Loop VarIdent LoopStat
+        | CoreStat Stat
+
+    data WhileStat
+        = While BExp WhileStat
+        | CoreStat Stat
+
+Obviously, this won't work, e.g.
+
+    LOOP x1 DO
+      x3 := 0;
+      LOOP x3 DO
+        x4 := 1
+      END
+    END
+
+becomes
+
+    LoopStat (VarIdent x1) (CoreStat (Seq [Assign x3 (Const 0),
+                                        {- Here's the Problem: Loops cannot become a Stat -}
+                                           LoopStat x3 (Assign x4 (Const 1))])) -- This is impossible with the above definition of LoopStat!
+
+Similarly, these definitions are ill-defined as well as LOOPs / WHILEs cannot
+be nested:
+
+    data LoopStat
+        = Loop VarIdent CoreStat
+        | CoreStat CoreStat
+
+    data WhileStat
+        = While BExp CoreStat
+        | CoreStat CoreStat
+
+But I think the general idea how I want to structure the code becomes clear
+- even with these examples full of failure. So I had the idea to parameterize
+everything which leads to:
+
+
+### Solution 3
+TODO Type classes, parametrization...
+
+    class Translatable a where
+        translate :: Stat -> a
+        translateForLoop :: Stat -> State [VarIdent] a
+
+oder
+
+    -- not (necessarily) bijective
+    class Corephism a where
+        fromCore :: Stat -> a
+        toCore :: a -> Stat -- probably a partial function
+
+    data Stat
+        = Assign VarIdent AExp
+        | If BExp Stat
+        | IfElse BExp Stat Stat
+        | ForLoop VarIdent Stat
+        | Seq [Stat]
+
+    instance Corephism Stat where
+        fromCore = id
+        toCore   = id
+
+    parseIfStat :: Corephism a => Parser a
+    parseIfStat = do 
+        reserved "IF"
+        cond <- parseRelExp
+        reserved "THEN"
+        thenpart <- parseStat
+        reserved "END"
+        return $ fromCore $ If cond thenpart
+
+    {-...-}
+
+--
+    import qualified CoreLanguage as C
+
+    data LoopStat
+        = Assign VarIdent AExp
+        | If BExp LoopStat
+        | IfElse BExp LoopStat LoopStat
+        | Loop VarIdent LoopStat
+        | Seq [LoopStat]
+
+    -- TODO: Would view patterns improve this code?
+    instance C.Corephism LoopStat where
+        fromCore (C.Assign ident aexp) = Assign ident aexp
+        fromCore (C.If bexp stat)      = If bexp (fromCore stat)
+        fromCore (C.IfElse bexp stat1 stat2) = IfElse bexp (fromCore stat1) (fromCore stat2)
+        fromCore (C.ForLoop i stat)    = Loop i (fromCore stat)
+        fromCore (C.Seq stats)         = Seq $ map translate stats
+
+    parseLoopStat :: Parser LoopStat
+    parseLoopStat = do
+        reserved "LOOP"
+        ident <- parseVar
+        reserved "DO"
+        body <- parseStat
+        reserved "END"
+        return $ Loop ident body
+
+    parseStat :: Parser LoopStat
+    parseStat = choice 
+              [ try parseIfElseStat
+              , parseIfStat
+              , parseLoopStat
+              , try parseAssignStat
+              ]
+
+--
+
+    the same for while
+
+### Conclusion
+
+Can you help me? Maybe some advanced things like type families can help me 
+(although I don't really looked into them yet)? I hope my problem became clear.
+
+-------------------------------------------------------------------------------
+
+    class Core a where
+        toCore :: a -> CoreStat
+        fromCore :: CoreStat -> a
